@@ -43,6 +43,7 @@ class GAILModel(object):
         self.noise: Optional[tf.Tensor] = None
         self.z: Optional[tf.Tensor] = None
 
+        # self.graph = tf.Graph()
         self.make_inputs()
         self.create_network()
         self.create_loss(learning_rate)
@@ -233,12 +234,25 @@ class GAILModel(object):
             self.done_policy,
             reuse=True,
         )
+        self.policy_estimate_with_grad, _, _ = self.create_encoder(
+            self.encoded_policy,
+            self.policy.selected_actions_with_grad,
+            self.done_policy,
+            reuse=True,
+        )
         self.mean_policy_estimate = tf.reduce_mean(self.policy_estimate)
         self.mean_expert_estimate = tf.reduce_mean(self.expert_estimate)
         self.discriminator_score = tf.reshape(
             self.policy_estimate, [-1], name="gail_reward"
         )
+        self.discriminator_score_with_grad = tf.reshape(
+            self.policy_estimate_with_grad, [-1], name="gail_reward_with_grad"
+        )
         self.intrinsic_reward = -tf.log(1.0 - self.discriminator_score + EPSILON)
+        self.intrinsic_reward_with_grad = -tf.log(1.0 - self.discriminator_score_with_grad + EPSILON)
+        self.trainable_variables = tf.get_collection(
+            tf.GraphKeys.TRAINABLE_VARIABLES, scope="GAIL_model"
+        )
 
     def create_gradient_magnitude(self) -> tf.Tensor:
         """
@@ -309,4 +323,5 @@ class GAILModel(object):
             self.loss += self.gradient_penalty_weight * self.create_gradient_magnitude()
 
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+        # self.update_batch = optimizer.minimize(self.loss, var_list=self.trainable_variables)
         self.update_batch = optimizer.minimize(self.loss)

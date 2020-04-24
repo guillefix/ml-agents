@@ -23,7 +23,9 @@ class NNPolicy(TFPolicy):
         is_training: bool,
         load: bool,
         tanh_squash: bool = False,
-        reparameterize: bool = False,
+        # tanh_squash: bool = True,
+        # reparameterize: bool = False,
+        reparameterize: bool = True,
         condition_sigma_on_obs: bool = True,
         create_tf_graph: bool = True,
     ):
@@ -83,6 +85,8 @@ class NNPolicy(TFPolicy):
 
             self.create_input_placeholders()
             encoded = self._create_encoder(
+                self.latent_vec,
+                self.use_latent,
                 self.visual_in,
                 self.processed_vector_in,
                 self.h_size,
@@ -145,6 +149,8 @@ class NNPolicy(TFPolicy):
 
     def _create_encoder(
         self,
+        latent_vec: tf.Tensor,
+        use_latent: bool,
         visual_in: List[tf.Tensor],
         vector_in: tf.Tensor,
         h_size: int,
@@ -166,6 +172,8 @@ class NNPolicy(TFPolicy):
                 h_size,
                 num_layers,
                 vis_encode_type,
+                latent_vec = latent_vec,
+                use_latent = use_latent,
             )[0]
         return encoded
 
@@ -215,6 +223,7 @@ class NNPolicy(TFPolicy):
             self.output = tf.identity(output_post, name="action")
 
         self.selected_actions = tf.stop_gradient(self.output)
+        self.selected_actions_with_grad = self.output
 
         self.all_log_probs = tf.identity(distribution.log_probs, name="action_probs")
         self.entropy = distribution.entropy

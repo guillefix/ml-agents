@@ -55,6 +55,8 @@ class TFPolicy(Policy):
         self.vis_obs_size = brain.number_visual_observations
 
         self.use_recurrent = trainer_parameters["use_recurrent"]
+        self.latent_size = int(trainer_parameters["latent_size"])
+        self.use_latent = trainer_parameters.get("use_latent", False)
         self.memory_dict: Dict[str, np.ndarray] = {}
         self.num_branches = len(self.brain.vector_action_space_size)
         self.previous_action_dict: Dict[str, np.array] = {}
@@ -217,6 +219,8 @@ class TFPolicy(Policy):
             feed_dict[self.visual_in[i]] = vec_vis_obs.visual_observations[i]
         if self.use_vec_obs:
             feed_dict[self.vector_in] = vec_vis_obs.vector_observations
+        if self.use_latent:
+            feed_dict[self.latent_vec] = np.random.randn(*[vec_vis_obs.vector_observations.shape[0], self.latent_size])
         if not self.use_continuous_act:
             mask = np.ones(
                 (
@@ -377,6 +381,7 @@ class TFPolicy(Policy):
                 self.brain.camera_resolutions
             )
             self.vector_in = ModelUtils.create_vector_input(self.vec_obs_size)
+            self.latent_vec = ModelUtils.create_latent_input(self.latent_size)
             if self.normalize:
                 normalization_tensors = ModelUtils.create_normalizer(self.vector_in)
                 self.update_normalization_op = normalization_tensors.update_op

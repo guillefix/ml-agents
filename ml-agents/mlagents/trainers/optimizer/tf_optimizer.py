@@ -28,6 +28,7 @@ class TFOptimizer(Optimizer):  # pylint: disable=W0223
             BCModule.check_config(trainer_params["behavioral_cloning"])
             self.bc_module = BCModule(
                 self.policy,
+                self,
                 policy_learning_rate=trainer_params["learning_rate"],
                 default_batch_size=trainer_params["batch_size"],
                 default_num_epoch=3,
@@ -44,6 +45,8 @@ class TFOptimizer(Optimizer):  # pylint: disable=W0223
 
         if self.policy.vec_obs_size > 0:
             feed_dict[self.policy.vector_in] = batch["vector_obs"]
+        if self.policy.use_latent:
+            feed_dict[self.policy.latent_vec] = np.random.randn(*[len(batch["vector_obs"]), self.policy.latent_size])
         if self.policy.vis_obs_size > 0:
             for i in range(len(self.policy.visual_in)):
                 _obs = batch["visual_obs%d" % i]
@@ -104,6 +107,8 @@ class TFOptimizer(Optimizer):  # pylint: disable=W0223
 
         if self.policy.vec_obs_size > 0:
             feed_dict[self.policy.vector_in] = [vec_vis_obs.vector_observations]
+        if self.policy.use_latent:
+            feed_dict[self.policy.latent_vec] = np.random.randn(*[1, self.policy.latent_size])
         if policy_memory is not None:
             feed_dict[self.policy.memory_in] = policy_memory
         if value_memory is not None:

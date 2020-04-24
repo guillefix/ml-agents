@@ -339,6 +339,9 @@ class PPOOptimizer(TFOptimizer):
             feed_dict[self.policy.action_masks] = mini_batch["action_mask"]
         if "vector_obs" in mini_batch:
             feed_dict[self.policy.vector_in] = mini_batch["vector_obs"]
+        if self.policy.use_latent:
+            vector_obs = mini_batch["vector_obs"]
+            feed_dict[self.policy.latent_vec] = np.random.randn(*[len(vector_obs), self.policy.latent_size])
         if self.policy.vis_obs_size > 0:
             for i, _ in enumerate(self.policy.visual_in):
                 feed_dict[self.policy.visual_in[i]] = mini_batch["visual_obs%d" % i]

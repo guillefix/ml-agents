@@ -1,11 +1,13 @@
 from mlagents.tf_utils import tf
+import numpy as np
 
 from mlagents.trainers.policy.tf_policy import TFPolicy
+# from mlagents.trainers.optimizer.tf_optimizer import TFOptimizer
 
 
 class BCModel(object):
     def __init__(
-        self, policy: TFPolicy, learning_rate: float = 3e-4, anneal_steps: int = 0
+        self, policy: TFPolicy, optimizer, learning_rate: float = 3e-4, anneal_steps: int = 0
     ):
         """
         Tensorflow operations to perform Behavioral Cloning on a Policy model
@@ -14,6 +16,7 @@ class BCModel(object):
         :param anneal_steps: Number of steps over which to anneal BC training
         """
         self.policy = policy
+        self.optimizer = optimizer
         self.expert_visual_in = self.policy.visual_in
         self.obs_in_expert = self.policy.vector_in
         self.make_inputs()
@@ -53,9 +56,14 @@ class BCModel(object):
         """
         selected_action = self.policy.output
         if self.policy.use_continuous_act:
-            self.loss = tf.reduce_mean(
-                tf.squared_difference(selected_action, self.expert_action)
-            )
+            if self.policy.use_latent:
+                gail = self.optimizer.reward_signals["gail"]
+                # self.loss = -gail.model.intrinsic_reward
+                self.loss = -gail.model.intrinsic_reward_with_grad
+            else:
+                self.loss = tf.reduce_mean(
+                    tf.squared_difference(selected_action, self.expert_action)
+                )
         else:
             log_probs = self.policy.all_log_probs
             self.loss = tf.reduce_mean(
@@ -72,4 +80,5 @@ class BCModel(object):
         optimizer = tf.train.AdamOptimizer(
             learning_rate=self.annealed_learning_rate, name="bc_adam"
         )
-        self.update_batch = optimizer.minimize(self.loss)
+        #only update the policy variables, not the GAIL model ones
+        self.update_batch = optimizer.minimize(self.loss, var_list=self.policy.get_trainable_variables())

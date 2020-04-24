@@ -128,6 +128,21 @@ class ModelUtils:
         return visual_in
 
     @staticmethod
+    def create_latent_input(
+        latent_size: int, name: str = "latent_vector"
+    ) -> tf.Tensor:
+        """
+        Creates ops for latent vector as an input.
+        :param latent_size: Size of latent vector.
+        :param name: Name of the placeholder op.
+        :return: Placeholder for vector observations.
+        """
+        latent_vec = tf.placeholder(
+            shape=[None, latent_size], dtype=tf.float32, name=name
+        )
+        return latent_vec
+
+    @staticmethod
     def create_vector_input(
         vec_obs_size: int, name: str = "vector_observation"
     ) -> tf.Tensor:
@@ -271,6 +286,38 @@ class ModelUtils:
                     activation=activation,
                     reuse=reuse,
                     name="hidden_{}".format(i),
+                    kernel_initializer=tf.initializers.variance_scaling(1.0),
+                )
+        return hidden
+
+    @staticmethod
+    def create_latent_encoder(
+        combined_encoded: tf.Tensor,
+        h_size: int,
+        activation: ActivationFunction,
+        num_layers: int,
+        scope: str,
+        reuse: bool,
+    ) -> tf.Tensor:
+        """
+        Builds a set of hidden state encoders.
+        :param reuse: Whether to re-use the weights within the same scope.
+        :param scope: Graph scope for the encoder ops.
+        :param combined_encoded: The concatenation of the encoded observations and the latent vector
+        :param h_size: Hidden layer size.
+        :param activation: What type of activation function to use for layers.
+        :param num_layers: number of hidden layers to create.
+        :return: List of hidden layer tensors.
+        """
+        with tf.variable_scope(scope):
+            hidden = combined_encoded
+            for i in range(num_layers):
+                hidden = tf.layers.dense(
+                    hidden,
+                    h_size,
+                    activation=activation,
+                    reuse=reuse,
+                    name="latentenc_hidden_{}".format(i),
                     kernel_initializer=tf.initializers.variance_scaling(1.0),
                 )
         return hidden
@@ -536,8 +583,11 @@ class ModelUtils:
         num_streams: int,
         h_size: int,
         num_layers: int,
+        latent_dim: int = 0,
         vis_encode_type: EncoderType = EncoderType.SIMPLE,
         stream_scopes: List[str] = None,
+        latent_vec: tf.Tensor = tf.zeros([1, 1]) ,
+        use_latent: bool = False,
     ) -> List[tf.Tensor]:
         """
         Creates encoding stream for observations.
@@ -581,17 +631,32 @@ class ModelUtils:
                     scope=f"{_scope_add}main_graph_{i}",
                     reuse=False,
                 )
+            has_more_inputs = True
             if hidden_state is not None and hidden_visual is not None:
                 final_hidden = tf.concat([hidden_visual, hidden_state], axis=1)
             elif hidden_state is None and hidden_visual is not None:
                 final_hidden = hidden_visual
             elif hidden_state is not None and hidden_visual is None:
                 final_hidden = hidden_state
+            elif latent_size > 0 and use_latent:
+                final_hidden = latent_vec
+                has_more_inputs = False
             else:
                 raise Exception(
                     "No valid network configuration possible. "
                     "There are no states or observations in this brain"
                 )
+            if use_latent:
+                if has_more_inputs:
+                    final_hidden = tf.concat([final_hidden, latent_vec], axis=1)
+                    final_hidden = ModelUtils.create_latent_encoder(
+                        final_hidden,
+                        h_size,
+                        activation_fn,
+                        num_layers,
+                        scope=f"{_scope_add}main_graph_{i}",
+                        reuse=False,
+                    )
             final_hiddens.append(final_hidden)
         return final_hiddens
 

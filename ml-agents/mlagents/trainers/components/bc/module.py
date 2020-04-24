@@ -2,6 +2,7 @@ from typing import Dict, Any
 import numpy as np
 
 from mlagents.trainers.policy.tf_policy import TFPolicy
+# from mlagents.trainers.optimizer.tf_optimizer import TFOptimizer
 from .model import BCModel
 from mlagents.trainers.demo_loader import demo_to_buffer
 from mlagents.trainers.exception import UnityTrainerException
@@ -11,6 +12,8 @@ class BCModule:
     def __init__(
         self,
         policy: TFPolicy,
+        optimizer,
+        # optimizer: TFOptimizer,
         policy_learning_rate: float,
         default_batch_size: int,
         default_num_epoch: int,
@@ -36,8 +39,9 @@ class BCModule:
         :param samples_per_update: Maximum number of samples to train on during each BC update.
         """
         self.policy = policy
+        self.optimizer = optimizer
         self.current_lr = policy_learning_rate * strength
-        self.model = BCModel(policy, self.current_lr, steps)
+        self.model = BCModel(policy, optimizer, self.current_lr, steps)
         _, self.demonstration_buffer = demo_to_buffer(demo_path, policy.sequence_length)
 
         self.batch_size = batch_size if batch_size else default_batch_size
@@ -134,6 +138,8 @@ class BCModule:
             )
         if self.policy.brain.vector_observation_space_size > 0:
             feed_dict[self.policy.vector_in] = mini_batch_demo["vector_obs"]
+        if self.policy.use_latent:
+            feed_dict[self.policy.latent_vec] = np.random.randn(*[len(mini_batch_demo["vector_obs"]), self.policy.latent_size])
         for i, _ in enumerate(self.policy.visual_in):
             feed_dict[self.policy.visual_in[i]] = mini_batch_demo["visual_obs%d" % i]
         if self.use_recurrent:
@@ -142,6 +148,17 @@ class BCModule:
             )
             if not self.policy.use_continuous_act:
                 feed_dict[self.policy.prev_action] = mini_batch_demo["prev_action"]
+        if self.policy.use_latent:
+            gail = self.optimizer.reward_signals["gail"]
+            # print("HIIII")
+            # print(gail)
+            # print(gail.model)
+            # print(gail.model.done_policy_holder)
+            if gail.model.use_vail:
+                feed_dict[gail.model.use_noise] = [0]
+            feed_dict[gail.model.done_policy_holder] = np.array(
+                mini_batch_demo["done"]
+            ).flatten()
         network_out = self.policy.sess.run(
             list(self.out_dict.values()), feed_dict=feed_dict
         )
